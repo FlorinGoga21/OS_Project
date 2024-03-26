@@ -35,7 +35,7 @@ int main(int argc, char *argv[])
             }
             closedir(dir);
         }*/ /*make it not go out of the folder and its ok*/ 
-        
+        //commit test 
 
         printf("Path: %s\n", path);
 
