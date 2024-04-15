@@ -15,8 +15,14 @@ int isDirectory(const char *path) {
     return S_ISDIR(statbuf.st_mode);
 }
 
-void saveToFile(FILE *file, const char *data) {
-    fprintf(file, "%s\n", data); 
+void saveToFile(int fd, const char *dir, const char *data, int isPath) {
+    char fullPath[300];
+    if (isPath) {
+        sprintf(fullPath, "%s/%s\n", dir, data);
+    } else {
+        sprintf(fullPath, "%s\n", data);
+    }
+    write(fd, fullPath, strlen(fullPath)); 
 }
 
 int main(int argc, char *argv[]) {
@@ -31,8 +37,8 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    FILE *file = fopen("output.txt", "w"); 
-    if (file == NULL) {
+    int fd = open("output.txt", O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+    if (fd == -1) {
         perror("output.txt");
         exit(EXIT_FAILURE);
     }
@@ -57,18 +63,18 @@ int main(int argc, char *argv[]) {
             while ((d2 = readdir(dir)) != NULL) {
                 printf("Path: %s\n", path);
                 printf("%s\n", d2->d_name);
-                saveToFile(file, d2->d_name); 
+                saveToFile(fd, path, d2->d_name, 1); 
             }
 
             closedir(dir);
         }
 
         printf("Path: %s\n", path);
-        saveToFile(file, d->d_name); 
+        saveToFile(fd, argv[1], d->d_name, 0); 
     }
 
     closedir(director);
-    fclose(file); 
+    close(fd);
 
     exit(EXIT_SUCCESS);
 }
