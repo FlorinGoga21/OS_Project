@@ -5,8 +5,11 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <sys/sysmacros.h>
 #include <unistd.h>
+
+#define MAX_PATH_LENGTH 300
+#define MAX_FILE_LENGTH 1000
+#define MAX_DIRECTORIES 10
 
 int isDirectory(const char *path) {
     struct stat statbuf;
@@ -16,30 +19,41 @@ int isDirectory(const char *path) {
 }
 
 void saveToFile(int fd, const char *dir, const char *data, int isPath) {
-    char fullPath[300];
+    char fullPath[MAX_PATH_LENGTH + MAX_FILE_LENGTH];
     if (isPath) {
-        sprintf(fullPath, "%s/%s\n", dir, data);
+        snprintf(fullPath, sizeof(fullPath), "%s/%s\n", dir, data);
     } else {
-        sprintf(fullPath, "%s\n", data);
+        snprintf(fullPath, sizeof(fullPath), "%s\n", data);
     }
     write(fd, fullPath, strlen(fullPath)); 
 }
 
-int main(int argc, char *argv[]) {
-    if (argc != 2) {
-        fprintf(stderr, "Usage: %s <directory>\n", argv[0]);
-        exit(EXIT_FAILURE);
+int hasChanged(const char *filePath, size_t newSize) {
+    struct stat st;
+    if (stat(filePath, &st) == -1) {
+        perror("Error getting file status");
+        return 1; 
     }
 
-    DIR *director = opendir(argv[1]);
+    if (st.st_size != newSize) {
+        return 1;
+    }
+    return 0;
+}
+
+int saveAndCheckChanges(const char *directory) {
+    DIR *director = opendir(directory);
     if (director == NULL) {
         perror("opendir");
         exit(EXIT_FAILURE);
     }
 
-    int fd = open("output.txt", O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+    char outputFileName[MAX_PATH_LENGTH + 20]; 
+    snprintf(outputFileName, sizeof(outputFileName), "snapshot_%s.txt", directory);
+
+    int fd = open(outputFileName, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
     if (fd == -1) {
-        perror("output.txt");
+        perror(outputFileName);
         exit(EXIT_FAILURE);
     }
 
@@ -49,8 +63,8 @@ int main(int argc, char *argv[]) {
             continue; 
         
         printf("%s\n", d->d_name);
-        char path[300];
-        sprintf(path, "%s/%s", argv[1], d->d_name);
+        char path[MAX_PATH_LENGTH];
+        snprintf(path, sizeof(path), "%s/%s", directory, d->d_name);
 
         if (isDirectory(path)) {
             struct dirent *d2;
@@ -70,11 +84,28 @@ int main(int argc, char *argv[]) {
         }
 
         printf("Path: %s\n", path);
-        saveToFile(fd, argv[1], d->d_name, 0); 
+        saveToFile(fd, directory, d->d_name, 0); 
     }
-
-    closedir(director);
     close(fd);
 
-    exit(EXIT_SUCCESS);
+    int changed = hasChanged(outputFileName, strlen(directory) + 1); 
+    if (changed)
+        printf("Yes\n\n");
+    else
+        printf("No\n\n");
+
+    return changed;
+}
+
+int main(int argc, char *argv[]) {
+    if (argc < 2 || argc > MAX_DIRECTORIES + 1) {
+        fprintf(stderr, "Usage: %s <directory1> [<directory2> ... <directoryN>]\n", argv[0]);
+        exit(EXIT_FAILURE);
+    }
+
+    for (int i = 1; i < argc; i++) {
+        saveAndCheckChanges(argv[i]);
+    }
+
+    return EXIT_SUCCESS;
 }
