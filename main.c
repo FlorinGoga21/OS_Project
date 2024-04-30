@@ -99,7 +99,7 @@ int saveAndCheckChanges(const char *directory) {
 }
 
 void child_process(const char *directory) {
-    saveAndCheckChanges(directory);
+   saveAndCheckChanges(directory);
     exit(EXIT_SUCCESS);
 }
 
@@ -134,10 +134,6 @@ int main(int argc, char *argv[]) {
     if (argc < 2 || argc > MAX_DIRECTORIES + 1) {
         fprintf(stderr, "Usage: %s <directory1> [<directory2> ... <directoryN>]\n", argv[0]);
         exit(EXIT_FAILURE);
-    }
-
-    for (int i = 1; i < argc; i++) {
-        saveAndCheckChanges(argv[i]);
     }
 
     parent_process(argv + 1, argc - 1);
