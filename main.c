@@ -7,10 +7,34 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <errno.h>
 
 #define MAX_PATH_LENGTH 300
 #define MAX_FILE_LENGTH 1000
 #define MAX_DIRECTORIES 10
+
+void createDirectoryRecursive(const char *path) {
+    char *pathCopy = strdup(path); 
+    char *token = strtok(pathCopy, "/");
+
+    char dir[MAX_PATH_LENGTH];
+    strcpy(dir, token);
+
+    while (token != NULL) {
+        if (mkdir(dir, 0700) == -1 && errno != EEXIST) {
+            perror("Error creating directory");
+            free(pathCopy);
+            exit(EXIT_FAILURE);
+        }
+        token = strtok(NULL, "/");
+        if (token != NULL) {
+            strcat(dir, "/");
+            strcat(dir, token);
+        }
+    }
+
+    free(pathCopy);
+}
 
 int isDirectory(const char *path) {
     struct stat statbuf;
@@ -130,11 +154,72 @@ void parent_process(char *directories[], int num_directories) {
     }
 }
 
-int main(int argc, char *argv[]) {
-    if (argc < 2 || argc > MAX_DIRECTORIES + 1) {
-        fprintf(stderr, "Usage: %s <directory1> [<directory2> ... <directoryN>]\n", argv[0]);
+void moveFileToIsolatedSpace(const char *filePath, const char *isolatedSpaceDir) {
+    char isolatedFilePath[MAX_PATH_LENGTH];
+    snprintf(isolatedFilePath, sizeof(isolatedFilePath), "%s/%s", isolatedSpaceDir, strrchr(filePath, '/') + 1);
+
+    createDirectoryRecursive(isolatedSpaceDir);
+    printf("Moving file from: %s\n", filePath);
+    printf("Moving file to: %s\n", isolatedFilePath); 
+    if (rename(filePath, isolatedFilePath) == -1) {
+        perror("Error moving file to isolated space");
         exit(EXIT_FAILURE);
     }
+}
+
+void moveDangerousFiles(const char *directory, const char *isolatedSpaceDir) {
+    DIR *dir = opendir(directory);
+    if (dir == NULL) {
+        perror("opendir");
+        exit(EXIT_FAILURE);
+    }
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        char filePath[MAX_PATH_LENGTH];
+        snprintf(filePath, sizeof(filePath), "%s/%s", directory, entry->d_name);
+        struct stat statbuf;
+
+        if (stat(filePath, &statbuf) == -1) {
+            perror("Error getting file status");
+            continue;
+        }
+
+        if (S_ISREG(statbuf.st_mode) && strncmp(entry->d_name, "dangerous", 9) == 0 && strstr(entry->d_name, ".txt") != NULL) {
+            moveFileToIsolatedSpace(filePath, isolatedSpaceDir);
+            printf("File \"%s\" has been isolated.\n", entry->d_name);
+        }
+    }
+
+    closedir(dir);
+}
+
+void isolateDangerousFiles(char *directories[], int numDirectories, const char *isolatedSpaceDir) {
+    for (int i = 0; i < numDirectories; i++) {
+        moveDangerousFiles(directories[i], isolatedSpaceDir);
+    }
+}
+
+int main(int argc, char *argv[]) {
+    if (argc < 3 || argc > MAX_DIRECTORIES + 2) {
+        fprintf(stderr, "Usage: %s -s <isolated_space_dir> <directory1> <directory2> ... <directoryN>\n", argv[0]);
+        exit(EXIT_FAILURE);
+    }
+
+    const char *isolatedSpaceDir;
+    char **directories;
+    int numDirectories;
+
+    if (strcmp(argv[1], "-s") == 0) {
+        isolatedSpaceDir = argv[2];
+        directories = argv + 3;
+        numDirectories = argc - 3;
+    } else {
+        fprintf(stderr, "Usage: %s -s <isolated_space_dir> <directory1> <directory2> ... <directoryN>\n", argv[0]);
+        exit(EXIT_FAILURE);
+    }
+
+    isolateDangerousFiles(directories, numDirectories, isolatedSpaceDir);
 
     parent_process(argv + 1, argc - 1);
 
