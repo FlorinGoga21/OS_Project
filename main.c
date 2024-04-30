@@ -6,6 +6,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <sys/wait.h>
 
 #define MAX_PATH_LENGTH 300
 #define MAX_FILE_LENGTH 1000
@@ -97,6 +98,38 @@ int saveAndCheckChanges(const char *directory) {
     return changed;
 }
 
+void child_process(const char *directory) {
+    saveAndCheckChanges(directory);
+    exit(EXIT_SUCCESS);
+}
+
+void parent_process(char *directories[], int num_directories) {
+    pid_t pid;
+    int status;
+
+    for (int i = 0; i < num_directories; i++) {
+        pid = fork();
+        
+        if (pid == -1) {
+            perror("fork");
+            exit(EXIT_FAILURE);
+        } else if (pid == 0) {
+            
+            child_process(directories[i]);
+        }
+    }
+
+   
+    for (int i = 0; i < num_directories; i++) {
+        pid = wait(&status);
+        if (WIFEXITED(status)) {
+            printf("Child Process %d terminated with PID %d and exit code %d.\n", i+1, pid, WEXITSTATUS(status));
+        } else {
+            printf("Child Process %d terminated abnormally.\n", i+1);
+        }
+    }
+}
+
 int main(int argc, char *argv[]) {
     if (argc < 2 || argc > MAX_DIRECTORIES + 1) {
         fprintf(stderr, "Usage: %s <directory1> [<directory2> ... <directoryN>]\n", argv[0]);
@@ -106,6 +139,8 @@ int main(int argc, char *argv[]) {
     for (int i = 1; i < argc; i++) {
         saveAndCheckChanges(argv[i]);
     }
+
+    parent_process(argv + 1, argc - 1);
 
     return EXIT_SUCCESS;
 }
